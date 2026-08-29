@@ -8,7 +8,7 @@ import {
 import { parse } from "../src/mod.ts";
 
 const file = Deno.readFileSync(
-  new URL("../fixture/TestSoundFont.sf2", import.meta.url),
+  new URL("../fixture/GeneralUser_GS_v1.472.sf3", import.meta.url),
 );
 
 // getVoice() warns when a key falls outside every zone's range, which is
