@@ -132,3 +132,31 @@ Deno.bench("getVoice only (all presets, 1 key) (new)", {
     soundFont.getVoice(bank, preset, KEY, VEL);
   }
 });
+
+// getAllParams only — isolates the zero-controller fast path from getVoice.
+const voices: ReturnType<typeof soundFont.getVoice>[] = [];
+for (let key = 0; key < 128; key++) {
+  const v = soundFont.getVoice(bank0, preset0, key, 100);
+  if (v) voices.push(v);
+}
+const controllerActive = new Float32Array(256);
+// CC1 (mod wheel): controllerType = (cc<<7)|index = 128+1 = 129
+// (see DefaultModulators 0x0081 → index 1, cc 1)
+controllerActive[129] = 0.5;
+
+Deno.bench("getAllParams only (zero controllers, 128 voices)", {
+  group: "getAllParams",
+  baseline: true,
+}, () => {
+  for (let i = 0; i < voices.length; i++) {
+    voices[i]!.getAllParams(controllerState);
+  }
+});
+
+Deno.bench("getAllParams only (one active controller, 128 voices)", {
+  group: "getAllParams",
+}, () => {
+  for (let i = 0; i < voices.length; i++) {
+    voices[i]!.getAllParams(controllerActive);
+  }
+});

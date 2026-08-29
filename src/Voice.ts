@@ -82,13 +82,38 @@ export class Voice {
     }
   }
 
+  // true if any primary modulator source has a non-zero value in
+  // controllerState (same predicate transformAllParams uses to skip a
+  // modulator). Amount-source controllers alone cannot change the result
+  // when the primary is zero.
+  private hasActiveController(controllerState: Float32Array): boolean {
+    for (const controllerType of this.controllerToDestinations.keys()) {
+      if (controllerState[controllerType]) return true;
+    }
+    return false;
+  }
+
   // applies every modulator whose source controller is present in
   // `controllerState` on top of this voice's static (zone-merged)
   // generators, and clamps the result to each generator's legal range —
   // both are spec-mandated (SF2 §8, §9.5), not implementation choices.
+  //
+  // Fast path: when no controller is active, returns the voice's already
+  // clamped zone-merged store without cloning. Callers must treat the
+  // returned store as read-only in that case (mutating it would corrupt
+  // the voice). When modulators do apply, a fresh clone is returned.
   transformAllParams(controllerState: Float32Array): GeneratorStore {
+    if (!this.hasActiveController(controllerState)) {
+      return this.generators;
+    }
+
     const params = this.generators.clone();
-    for (const modulator of this.modulators) {
+    // Track destinations we actually wrote so clamp only touches those.
+    const touched: ValueGeneratorKey[] = [];
+    const touchedSet = new Set<string>();
+
+    for (let i = 0; i < this.modulators.length; i++) {
+      const modulator = this.modulators[i];
       const controllerType = modulator.sourceOper.controllerType;
       const controllerValue = controllerState[controllerType];
       if (!controllerValue) continue;
@@ -106,8 +131,15 @@ export class Voice {
       const summingValue = modulator.transform(primary * secondary);
       if (Number.isNaN(summingValue)) continue;
       params.addTo(generatorKey, summingValue);
+      if (!touchedSet.has(generatorKey)) {
+        touchedSet.add(generatorKey);
+        touched.push(generatorKey);
+      }
     }
-    params.clamp();
+
+    for (let i = 0; i < touched.length; i++) {
+      params.clampKey(touched[i]);
+    }
     return params;
   }
 
@@ -157,6 +189,10 @@ export class Voice {
       generators,
       sample: this.sample,
       sampleHeader: this.sampleHeader,
+      // Sample offsets come from the static zone-merged generators (not
+      // modulator outputs); startAddrs* are not value-modulator targets
+      // in normal SF2 use, and matching the previous behavior avoids
+      // reading a shared store the caller might have aliased.
       start: this.generators.get("startAddrsCoarseOffset") * 32768 +
         this.generators.get("startAddrsOffset"),
       end: this.generators.get("endAddrsCoarseOffset") * 32768 +

@@ -207,6 +207,15 @@ export class GeneratorStore {
       this.values[code] = clampGenerator(key, value);
     }
   }
+
+  // clamp a single named generator (used after applying one modulator
+  // destination so we don't re-walk every generator code).
+  clampKey(key: NonRangeGeneratorKey): void {
+    const code = nameToCode.get(key)!;
+    const value = this.values[code];
+    if (Number.isNaN(value)) return;
+    this.values[code] = clampGenerator(key, value);
+  }
 }
 
 const fixedGenerators = [

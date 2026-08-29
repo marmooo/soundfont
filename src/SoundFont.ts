@@ -330,6 +330,10 @@ export class SoundFont implements ParseResult {
     const generators = createDefaultInstrumentGeneratorStore();
     generators.overlay(instrumentZone.generators);
     generators.add(presetZone.generators);
+    // Clamp once after zone summation (SF2 §9.5). getAllParams can then
+    // return this store as-is when no controller is active, without
+    // re-clamping on every note-on.
+    generators.clamp();
     const modulators = [
       ...DefaultModulators,
       ...presetZone.modulators,
