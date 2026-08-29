@@ -13,22 +13,32 @@ import {
   Instrument,
   ModulatorList,
   PresetHeader,
+  RangeValue,
   SampleHeader,
 } from "./Structs.ts";
 import { AudioData } from "./AudioData.ts";
 import { DefaultModulators } from "./DefaultModulators.ts";
 
-class InstrumentZone {
+// A local instrument zone with its global zone (if any) already merged in.
+// Built once at parse time so getVoice() only does range checks + a final
+// merge onto the default generator store.
+class CachedInstrumentZone {
   constructor(
     public generators: GeneratorStore,
     public modulators: ModulatorList[],
+    public keyRange: RangeValue | undefined,
+    public velRange: RangeValue | undefined,
   ) {}
 }
 
-class PresetZone {
+// A local preset zone with its global zone (if any) already merged in.
+class CachedPresetZone {
   constructor(
     public generators: GeneratorStore,
     public modulators: ModulatorList[],
+    public keyRange: RangeValue | undefined,
+    public velRange: RangeValue | undefined,
+    public instrumentID: number,
   ) {}
 }
 
@@ -55,6 +65,12 @@ export class SoundFont implements ParseResult {
   // on the headers after construction, call rebuildPresetIndex().
   private presetIndex: Map<number, number>;
 
+  // Per-instrument / per-preset local zones with global generators and
+  // modulators already folded in. Built once in the constructor so the
+  // note-on path never re-parses GeneratorList[] or re-slices bags.
+  private cachedInstrumentZones: CachedInstrumentZone[][];
+  private cachedPresetZones: CachedPresetZone[][];
+
   constructor(result: ParseResult) {
     this.presetHeaders = result.presetHeaders;
     this.presetZone = result.presetZone;
@@ -70,6 +86,8 @@ export class SoundFont implements ParseResult {
     this.info = result.info;
     this.presetIndex = new Map();
     this.rebuildPresetIndex();
+    this.cachedInstrumentZones = this.buildInstrumentZoneCache();
+    this.cachedPresetZones = this.buildPresetZoneCache();
   }
 
   // key for presetIndex: bank and preset are both 16-bit in the SF2 spec.
@@ -86,6 +104,101 @@ export class SoundFont implements ParseResult {
       if (p.isEnd) continue;
       map.set(SoundFont.presetKey(p.bank, p.preset), i);
     }
+  }
+
+  // Pre-merge each instrument's global zone into every local zone so
+  // findInstrumentZone only range-checks and returns a cached entry.
+  // Note: parse() drops the terminal EOI record, so every entry in
+  // instruments[] is a real instrument.
+  private buildInstrumentZoneCache(): CachedInstrumentZone[][] {
+    const n = this.instruments.length;
+    const cache: CachedInstrumentZone[][] = new Array(n);
+    for (let id = 0; id < n; id++) {
+      const generatorSegments = this.getInstrumentGenerators(id);
+      const modulatorSegments = this.getInstrumentModulators(id);
+      const locals: CachedInstrumentZone[] = [];
+      let globalGenerators: GeneratorStore | undefined;
+      let globalModulators: ModulatorList[] = [];
+      for (let i = 0; i < generatorSegments.length; i++) {
+        const generators = createInstrumentGeneratorStore(generatorSegments[i]);
+        if (!generators.has("sampleID")) {
+          globalGenerators = generators;
+          globalModulators = modulatorSegments[i];
+          continue;
+        }
+        let gen: GeneratorStore;
+        let mod: ModulatorList[];
+        if (globalGenerators) {
+          gen = globalGenerators.clone();
+          gen.overlay(generators);
+          mod = globalModulators.length === 0
+            ? modulatorSegments[i]
+            : [...globalModulators, ...modulatorSegments[i]];
+        } else {
+          gen = generators;
+          mod = modulatorSegments[i];
+        }
+        // Range checks use the local zone's ranges only (SF2: a local zone
+        // without keyRange/velRange is unrestricted, even if the global zone
+        // set one). Generators/modulators are still the global+local merge.
+        locals.push(
+          new CachedInstrumentZone(
+            gen,
+            mod,
+            generators.keyRange,
+            generators.velRange,
+          ),
+        );
+      }
+      cache[id] = locals;
+    }
+    return cache;
+  }
+
+  // Same for presets: fold the global preset zone into each local zone.
+  // Note: parse() drops the terminal EOP record, so every entry in
+  // presetHeaders[] is a real preset.
+  private buildPresetZoneCache(): CachedPresetZone[][] {
+    const n = this.presetHeaders.length;
+    const cache: CachedPresetZone[][] = new Array(n);
+    for (let id = 0; id < n; id++) {
+      const generatorSegments = this.getPresetGenerators(id);
+      const modulatorSegments = this.getPresetModulators(id);
+      const locals: CachedPresetZone[] = [];
+      let globalGenerators: GeneratorStore | undefined;
+      let globalModulators: ModulatorList[] = [];
+      for (let i = 0; i < generatorSegments.length; i++) {
+        const generators = createPresetGeneratorStore(generatorSegments[i]);
+        if (!generators.has("instrument")) {
+          globalGenerators = generators;
+          globalModulators = modulatorSegments[i];
+          continue;
+        }
+        let gen: GeneratorStore;
+        let mod: ModulatorList[];
+        if (globalGenerators) {
+          gen = globalGenerators.clone();
+          gen.overlay(generators);
+          mod = globalModulators.length === 0
+            ? modulatorSegments[i]
+            : [...globalModulators, ...modulatorSegments[i]];
+        } else {
+          gen = generators;
+          mod = modulatorSegments[i];
+        }
+        locals.push(
+          new CachedPresetZone(
+            gen,
+            mod,
+            generators.keyRange,
+            generators.velRange,
+            generators.get("instrument"),
+          ),
+        );
+      }
+      cache[id] = locals;
+    }
+    return cache;
   }
 
   getGeneratorParams(
@@ -174,64 +287,36 @@ export class SoundFont implements ParseResult {
     );
   }
 
-  findInstrumentZone(instrumentID: number, key: number, velocity: number) {
-    const instrumentGenerators = this.getInstrumentGenerators(instrumentID);
-    const instrumentModulators = this.getInstrumentModulators(instrumentID);
-    let globalGenerators: GeneratorStore | undefined;
-    let globalModulators: ModulatorList[] = [];
-    for (let i = 0; i < instrumentGenerators.length; i++) {
-      const generators = createInstrumentGeneratorStore(
-        instrumentGenerators[i],
-      );
-      if (!generators.has("sampleID")) {
-        globalGenerators = generators;
-        globalModulators = instrumentModulators[i];
-        continue;
-      }
-      if (generators.keyRange && !generators.keyRange.in(key)) continue;
-      if (generators.velRange && !generators.velRange.in(velocity)) continue;
-      if (globalGenerators) {
-        const gen = globalGenerators.clone();
-        gen.overlay(generators);
-        const mod = [...globalModulators, ...instrumentModulators[i]];
-        return new InstrumentZone(gen, mod);
-      } else {
-        return new InstrumentZone(generators, instrumentModulators[i]);
-      }
+  findInstrumentZone(
+    instrumentID: number,
+    key: number,
+    velocity: number,
+  ): CachedInstrumentZone | undefined {
+    const zones = this.cachedInstrumentZones[instrumentID];
+    if (!zones) return;
+    for (let i = 0; i < zones.length; i++) {
+      const zone = zones[i];
+      if (zone.keyRange && !zone.keyRange.in(key)) continue;
+      if (zone.velRange && !zone.velRange.in(velocity)) continue;
+      return zone;
     }
     return;
   }
 
   findInstrument(presetHeaderIndex: number, key: number, velocity: number) {
-    const presetGenerators = this.getPresetGenerators(presetHeaderIndex);
-    const presetModulators = this.getPresetModulators(presetHeaderIndex);
-    let globalGenerators: GeneratorStore | undefined;
-    let globalModulators: ModulatorList[] = [];
-    for (let i = 0; i < presetGenerators.length; i++) {
-      const generators = createPresetGeneratorStore(presetGenerators[i]);
-      if (!generators.has("instrument")) {
-        globalGenerators = generators;
-        globalModulators = presetModulators[i];
-        continue;
-      }
-      if (generators.keyRange && !generators.keyRange.in(key)) continue;
-      if (generators.velRange && !generators.velRange.in(velocity)) continue;
+    const zones = this.cachedPresetZones[presetHeaderIndex];
+    if (!zones) return null;
+    for (let i = 0; i < zones.length; i++) {
+      const zone = zones[i];
+      if (zone.keyRange && !zone.keyRange.in(key)) continue;
+      if (zone.velRange && !zone.velRange.in(velocity)) continue;
       const instrumentZone = this.findInstrumentZone(
-        generators.get("instrument"),
+        zone.instrumentID,
         key,
         velocity,
       );
       if (instrumentZone) {
-        if (globalGenerators) {
-          const gen = globalGenerators.clone();
-          gen.overlay(generators);
-          const mod = [...globalModulators, ...presetModulators[i]];
-          const presetZone = new PresetZone(gen, mod);
-          return this.createVoice(key, presetZone, instrumentZone);
-        } else {
-          const presetZone = new PresetZone(generators, presetModulators[i]);
-          return this.createVoice(key, presetZone, instrumentZone);
-        }
+        return this.createVoice(key, zone, instrumentZone);
       }
     }
     return null;
@@ -239,8 +324,8 @@ export class SoundFont implements ParseResult {
 
   createVoice(
     key: number,
-    presetZone: PresetZone,
-    instrumentZone: InstrumentZone,
+    presetZone: CachedPresetZone,
+    instrumentZone: CachedInstrumentZone,
   ) {
     const generators = createDefaultInstrumentGeneratorStore();
     generators.overlay(instrumentZone.generators);
