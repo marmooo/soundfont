@@ -49,6 +49,12 @@ export class SoundFont implements ParseResult {
   samplingData: SamplingData;
   info: Info;
 
+  // (bank << 16) | preset → index into presetHeaders. Built once so
+  // getVoice() is O(1) instead of a linear scan of every preset header.
+  // Terminal EOP records are skipped. If you rewrite bank/preset numbers
+  // on the headers after construction, call rebuildPresetIndex().
+  private presetIndex: Map<number, number>;
+
   constructor(result: ParseResult) {
     this.presetHeaders = result.presetHeaders;
     this.presetZone = result.presetZone;
@@ -62,6 +68,24 @@ export class SoundFont implements ParseResult {
     this.samples = result.samples;
     this.samplingData = result.samplingData;
     this.info = result.info;
+    this.presetIndex = new Map();
+    this.rebuildPresetIndex();
+  }
+
+  // key for presetIndex: bank and preset are both 16-bit in the SF2 spec.
+  private static presetKey(bank: number, preset: number): number {
+    return (bank << 16) | preset;
+  }
+
+  rebuildPresetIndex(): void {
+    const map = this.presetIndex;
+    map.clear();
+    const headers = this.presetHeaders;
+    for (let i = 0; i < headers.length; i++) {
+      const p = headers[i];
+      if (p.isEnd) continue;
+      map.set(SoundFont.presetKey(p.bank, p.preset), i);
+    }
   }
 
   getGeneratorParams(
@@ -244,10 +268,10 @@ export class SoundFont implements ParseResult {
     key: number,
     velocity: number,
   ): Voice | null {
-    const presetHeaderIndex = this.presetHeaders.findIndex(
-      (p) => p.preset === instrumentNumber && p.bank === bankNumber,
+    const presetHeaderIndex = this.presetIndex.get(
+      SoundFont.presetKey(bankNumber, instrumentNumber),
     );
-    if (presetHeaderIndex < 0) {
+    if (presetHeaderIndex === undefined) {
       console.warn(
         "preset not found: bank=%s instrument=%s",
         bankNumber,
