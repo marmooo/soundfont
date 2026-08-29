@@ -4,7 +4,11 @@ import {
   createPresetGeneratorStore,
   GeneratorStore,
 } from "./Generator.ts";
-import { Voice } from "./Voice.ts";
+import {
+  buildModulatorIndexes,
+  type ModulatorIndexes,
+  Voice,
+} from "./Voice.ts";
 import type { ParseResult, SamplingData } from "./Parser.ts";
 import {
   Bag,
@@ -42,6 +46,13 @@ class CachedPresetZone {
   ) {}
 }
 
+// DefaultModulators + preset zone + instrument zone modulators, with the
+// lookup maps Voice needs for getParams / hasActiveController. Built once
+// per zone pair and shared across every note that hits that pair.
+type ZonePairMods = ModulatorIndexes & {
+  modulators: ModulatorList[];
+};
+
 // SoundFont holds the same fields as ParseResult directly (rather than
 // nesting them under a `.parsed` property), plus the voice-lookup methods
 // below. `parse()` returns this; write() reads these fields back out.
@@ -71,6 +82,14 @@ export class SoundFont implements ParseResult {
   private cachedInstrumentZones: CachedInstrumentZone[][];
   private cachedPresetZones: CachedPresetZone[][];
 
+  // Lazy cache of DefaultModulators + zone modulators (+ their index maps)
+  // keyed by the cached zone objects. Chorded / repeated notes on the same
+  // zones reuse the same arrays and Maps without rebuilding.
+  private zonePairModCache = new WeakMap<
+    CachedPresetZone,
+    WeakMap<CachedInstrumentZone, ZonePairMods>
+  >();
+
   constructor(result: ParseResult) {
     this.presetHeaders = result.presetHeaders;
     this.presetZone = result.presetZone;
@@ -88,6 +107,33 @@ export class SoundFont implements ParseResult {
     this.rebuildPresetIndex();
     this.cachedInstrumentZones = this.buildInstrumentZoneCache();
     this.cachedPresetZones = this.buildPresetZoneCache();
+  }
+
+  private getZonePairMods(
+    presetZone: CachedPresetZone,
+    instrumentZone: CachedInstrumentZone,
+  ): ZonePairMods {
+    let inner = this.zonePairModCache.get(presetZone);
+    if (!inner) {
+      inner = new WeakMap();
+      this.zonePairModCache.set(presetZone, inner);
+    }
+    let cached = inner.get(instrumentZone);
+    if (!cached) {
+      const modulators = [
+        ...DefaultModulators,
+        ...presetZone.modulators,
+        ...instrumentZone.modulators,
+      ];
+      const indexes = buildModulatorIndexes(modulators);
+      cached = {
+        modulators,
+        controllerToDestinations: indexes.controllerToDestinations,
+        destinationToModulators: indexes.destinationToModulators,
+      };
+      inner.set(instrumentZone, cached);
+    }
+    return cached;
   }
 
   // key for presetIndex: bank and preset are both 16-bit in the SF2 spec.
@@ -334,20 +380,17 @@ export class SoundFont implements ParseResult {
     // return this store as-is when no controller is active, without
     // re-clamping on every note-on.
     generators.clamp();
-    const modulators = [
-      ...DefaultModulators,
-      ...presetZone.modulators,
-      ...instrumentZone.modulators,
-    ];
+    const zoneMods = this.getZonePairMods(presetZone, instrumentZone);
     const sampleID = generators.get("sampleID");
     const sample = this.samples[sampleID];
     const sampleHeader = this.sampleHeaders[sampleID];
     return new Voice(
       key,
       generators,
-      modulators,
+      zoneMods.modulators,
       sample,
       sampleHeader,
+      zoneMods,
     );
   }
 

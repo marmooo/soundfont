@@ -37,9 +37,41 @@ export interface VoiceParams {
   loopEnd: number;
 }
 
+// Precomputed modulator lookup tables. Built once per zone pair (or from
+// a modulators array) and shared across Voices that use the same zones.
+export interface ModulatorIndexes {
+  controllerToDestinations: Map<number, Set<number>>;
+  destinationToModulators: Map<number, ModulatorList[]>;
+}
+
+export function buildModulatorIndexes(
+  modulators: ModulatorList[],
+): ModulatorIndexes {
+  const controllerToDestinations = new Map<number, Set<number>>();
+  const destinationToModulators = new Map<number, ModulatorList[]>();
+  for (let i = 0; i < modulators.length; i++) {
+    const modulator = modulators[i];
+    const controllerType = modulator.sourceOper.controllerType;
+    const destinationOper = modulator.destinationOper;
+    const destSet = controllerToDestinations.get(controllerType);
+    if (destSet) {
+      destSet.add(destinationOper);
+    } else {
+      controllerToDestinations.set(controllerType, new Set([destinationOper]));
+    }
+    const list = destinationToModulators.get(destinationOper);
+    if (list) {
+      list.push(modulator);
+    } else {
+      destinationToModulators.set(destinationOper, [modulator]);
+    }
+  }
+  return { controllerToDestinations, destinationToModulators };
+}
+
 export class Voice {
-  controllerToDestinations = new Map<number, Set<number>>();
-  destinationToModulators = new Map<number, ModulatorList[]>();
+  controllerToDestinations: Map<number, Set<number>>;
+  destinationToModulators: Map<number, ModulatorList[]>;
 
   constructor(
     public key: number,
@@ -47,9 +79,20 @@ export class Voice {
     public modulators: ModulatorList[],
     public sample: AudioData,
     public sampleHeader: SampleHeader,
+    // When provided (e.g. from SoundFont's zone-pair cache), skip rebuilding
+    // the maps from modulators. The maps are treated as immutable and may be
+    // shared across Voices.
+    indexes?: ModulatorIndexes,
   ) {
-    this.setControllerToDestinations();
-    this.setDestinationToModulators();
+    if (indexes) {
+      this.controllerToDestinations = indexes.controllerToDestinations;
+      this.destinationToModulators = indexes.destinationToModulators;
+    } else {
+      this.controllerToDestinations = new Map();
+      this.destinationToModulators = new Map();
+      this.setControllerToDestinations();
+      this.setDestinationToModulators();
+    }
   }
 
   setControllerToDestinations() {
@@ -59,7 +102,7 @@ export class Voice {
       const destinationOper = modulator.destinationOper;
       const list = this.controllerToDestinations.get(controllerType);
       if (list) {
-        list.add(modulator.destinationOper);
+        list.add(destinationOper);
       } else {
         this.controllerToDestinations.set(
           controllerType,
