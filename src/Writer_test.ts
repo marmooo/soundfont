@@ -5,10 +5,10 @@ import type { SoundFont } from "./SoundFont.ts";
 
 const input = Deno.readFileSync("./fixture/TestSoundFont.sf2");
 const original = parse(input);
-const rewritten = await write(original);
-const reparsed = parse(rewritten);
+const rewrittenPromise = write(original);
 
-Deno.test("should round-trip INFO", () => {
+Deno.test("should round-trip INFO", async () => {
+  const reparsed = parse(await rewrittenPromise);
   assertEquals(reparsed.info.comment, original.info.comment);
   assertEquals(reparsed.info.copyright, original.info.copyright);
   assertEquals(
@@ -26,7 +26,8 @@ Deno.test("should round-trip INFO", () => {
   assertEquals(reparsed.info.version, original.info.version);
 });
 
-Deno.test("should round-trip presets", () => {
+Deno.test("should round-trip presets", async () => {
+  const reparsed = parse(await rewrittenPromise);
   assertEquals(
     reparsed.presetHeaders.length,
     original.presetHeaders.length,
@@ -47,7 +48,8 @@ Deno.test("should round-trip presets", () => {
   }
 });
 
-Deno.test("should round-trip instruments", () => {
+Deno.test("should round-trip instruments", async () => {
+  const reparsed = parse(await rewrittenPromise);
   assertEquals(
     reparsed.instruments.length,
     original.instruments.length,
@@ -60,7 +62,8 @@ Deno.test("should round-trip instruments", () => {
   }
 });
 
-Deno.test("should round-trip samples", () => {
+Deno.test("should round-trip samples", async () => {
+  const reparsed = parse(await rewrittenPromise);
   assertEquals(
     reparsed.sampleHeaders.length,
     original.sampleHeaders.length,
@@ -97,7 +100,8 @@ Deno.test("should round-trip samples", () => {
   }
 });
 
-Deno.test("should round-trip generators and modulators", () => {
+Deno.test("should round-trip generators and modulators", async () => {
+  const reparsed = parse(await rewrittenPromise);
   assertEquals(
     reparsed.presetGenerators,
     original.presetGenerators,
