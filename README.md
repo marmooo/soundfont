@@ -4,7 +4,7 @@ A SoundFont (SF2, SF3) parser and writer.
 
 ## Usage
 
-```
+```js
 import { parse } from "@marmooo/soundfont";
 
 const file = Deno.readFileSync("soundfont.sf3");
@@ -17,7 +17,7 @@ const soundFont = parse(file);
 bytes, and always returns a `Promise<Uint8Array>`. Edit `soundFont` in place,
 then pass it to `write()`.
 
-```
+```js
 import { parse, write } from "@marmooo/soundfont";
 
 const file = Deno.readFileSync("soundfont.sf2");
@@ -44,7 +44,7 @@ This package doesn't bundle one, so bring your own (e.g.
 [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm), or a WebCodecs-based
 encoder).
 
-```
+```js
 import { parse, write } from "@marmooo/soundfont";
 
 const file = Deno.readFileSync("soundfont.sf2");
