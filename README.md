@@ -40,7 +40,8 @@ by `parse()`.
 `write()` keeps every sample in its original format by default (PCM stays PCM).
 To produce a compressed SF3 file instead, pass `encode` — an Ogg Vorbis encoder.
 This package doesn't bundle one, so bring your own (e.g.
-[mediabunny](https://mediabunny.dev), ffmpeg.wasm, or a WebCodecs-based
+[mediabunny](https://github.com/Vanilagy/mediabunny),
+[ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm), or a WebCodecs-based
 encoder).
 
 ```
