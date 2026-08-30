@@ -46,11 +46,13 @@ class CachedPresetZone {
   ) {}
 }
 
-// DefaultModulators + preset zone + instrument zone modulators, with the
-// lookup maps Voice needs for getParams / hasActiveController. Built once
-// per zone pair and shared across every note that hits that pair.
+// DefaultModulators + zone modulators (+ index maps) and the zone-merged,
+// clamped GeneratorStore. Built once per zone pair and shared across every
+// note that hits that pair. The generators store is treated as read-only
+// on the note-on path (Voice clones it only when modulators actually apply).
 type ZonePairMods = ModulatorIndexes & {
   modulators: ModulatorList[];
+  generators: GeneratorStore;
 };
 
 // SoundFont holds the same fields as ParseResult directly (rather than
@@ -82,9 +84,10 @@ export class SoundFont implements ParseResult {
   private cachedInstrumentZones: CachedInstrumentZone[][];
   private cachedPresetZones: CachedPresetZone[][];
 
-  // Lazy cache of DefaultModulators + zone modulators (+ their index maps)
-  // keyed by the cached zone objects. Chorded / repeated notes on the same
-  // zones reuse the same arrays and Maps without rebuilding.
+  // Lazy cache of DefaultModulators + zone modulators (+ index maps) and
+  // the merged GeneratorStore, keyed by the cached zone objects. Chorded /
+  // repeated notes on the same zones reuse the same arrays, Maps, and store
+  // without rebuilding.
   private zonePairModCache = new WeakMap<
     CachedPresetZone,
     WeakMap<CachedInstrumentZone, ZonePairMods>
@@ -126,10 +129,17 @@ export class SoundFont implements ParseResult {
         ...instrumentZone.modulators,
       ];
       const indexes = buildModulatorIndexes(modulators);
+      // default + instrument (absolute) + preset (relative), clamped once.
+      // Shared across all keys/velocities that land on this zone pair.
+      const generators = createDefaultInstrumentGeneratorStore();
+      generators.overlay(instrumentZone.generators);
+      generators.add(presetZone.generators);
+      generators.clamp();
       cached = {
         modulators,
         controllerToDestinations: indexes.controllerToDestinations,
         destinationToModulators: indexes.destinationToModulators,
+        generators,
       };
       inner.set(instrumentZone, cached);
     }
@@ -373,14 +383,8 @@ export class SoundFont implements ParseResult {
     presetZone: CachedPresetZone,
     instrumentZone: CachedInstrumentZone,
   ) {
-    const generators = createDefaultInstrumentGeneratorStore();
-    generators.overlay(instrumentZone.generators);
-    generators.add(presetZone.generators);
-    // Clamp once after zone summation (SF2 §9.5). getAllParams can then
-    // return this store as-is when no controller is active, without
-    // re-clamping on every note-on.
-    generators.clamp();
     const zoneMods = this.getZonePairMods(presetZone, instrumentZone);
+    const generators = zoneMods.generators;
     const sampleID = generators.get("sampleID");
     const sample = this.samples[sampleID];
     const sampleHeader = this.sampleHeaders[sampleID];
