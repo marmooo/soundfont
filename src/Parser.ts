@@ -110,7 +110,7 @@ export function parseData(
 
   return {
     ...result,
-    samples: loadSamples(
+    samples: createLazySamples(
       result.sampleHeaders,
       result.samplingData.offsetMSB,
       result.samplingData.offsetLSB,
@@ -205,24 +205,57 @@ const parseIgen = (chunk: Chunk, data: Uint8Array) =>
 const parseShdr = (chunk: Chunk, data: Uint8Array, isSF3: boolean) =>
   parseChunkObjects(chunk, data, "shdr", SampleHeader, (s) => s.isEnd, isSF3);
 
-function loadSamples(
+// Builds an AudioData[] that materializes each entry on first index access
+// (getVoice / write / samples[i]). Parse only stores headers + a view into
+// the original buffer; individual sample subarrays and AudioData wrappers
+// are created the first time that index is read, then replaced with a plain
+// data property so later reads are a normal array load.
+function createLazySamples(
   sampleHeader: SampleHeader[],
   samplingDataOffsetMSB: number,
   samplingDataOffsetLSB: number | undefined,
   data: Uint8Array,
   isSF3: boolean,
 ): AudioData[] {
-  const result = new Array<AudioData>(sampleHeader.length);
+  const n = sampleHeader.length;
   const factor = isSF3 ? 1 : 2;
   const type = isSF3 ? "compressed" : samplingDataOffsetLSB ? "pcm24" : "pcm16";
-  for (let i = 0; i < sampleHeader.length; i++) {
-    const { start, end } = sampleHeader[i];
-    const startOffset = samplingDataOffsetMSB + start * factor;
-    const endOffset = samplingDataOffsetMSB + end * factor;
-    const sampleData = data.subarray(startOffset, endOffset);
-    result[i] = new AudioData(type, sampleHeader[i], sampleData);
+  const samples = new Array<AudioData>(n);
+
+  for (let i = 0; i < n; i++) {
+    Object.defineProperty(samples, i, {
+      configurable: true,
+      enumerable: true,
+      get() {
+        const { start, end } = sampleHeader[i];
+        const startOffset = samplingDataOffsetMSB + start * factor;
+        const endOffset = samplingDataOffsetMSB + end * factor;
+        const sample = new AudioData(
+          type,
+          sampleHeader[i],
+          data.subarray(startOffset, endOffset),
+        );
+        // Replace this getter with a data property for subsequent access.
+        Object.defineProperty(samples, i, {
+          value: sample,
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
+        return sample;
+      },
+      set(value: AudioData) {
+        Object.defineProperty(samples, i, {
+          value,
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
+      },
+    });
   }
-  return result;
+
+  return samples;
 }
 
 // parses raw SF2/SF3 bytes into a SoundFont, ready for voice lookup
