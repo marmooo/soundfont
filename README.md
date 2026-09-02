@@ -38,8 +38,8 @@ by `parse()`.
 ### Writing SF3
 
 `write()` keeps every sample in its original format by default (PCM stays PCM).
-To produce a compressed SF3 file instead, pass `encode` - an Ogg Vorbis encoder.
-This package doesn't bundle one, so bring your own (e.g.
+To produce a compressed SF3 file instead, pass `encode` -- an Ogg Vorbis
+encoder. This package doesn't bundle one, so bring your own (e.g.
 [mediabunny](https://github.com/Vanilagy/mediabunny),
 [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm), or a WebCodecs-based
 encoder).
@@ -64,17 +64,17 @@ Samples that are already compressed (an SF3 input's `"compressed"` samples) are
 passed through unchanged. The version tag is always written as 3.0 when `encode`
 is given.
 
-Samples are encoded concurrently - up to `options.concurrency` at once (defaults
-to `navigator.hardwareConcurrency`, or 4). This matters most when `encode`
-shells out to an external encoder or native bindings, since those are typically
-CPU-bound in a way a single `await` chain won't parallelize on its own. Pass
-`concurrency: 1` to encode sequentially instead.
+Samples are encoded concurrently -- up to `options.concurrency` at once
+(defaults to `navigator.hardwareConcurrency`, or 4). This matters most when
+`encode` shells out to an external encoder or native bindings, since those are
+typically CPU-bound in a way a single `await` chain won't parallelize on its
+own. Pass `concurrency: 1` to encode sequentially instead.
 
 Most Vorbis encoders only accept a handful of fixed sample rates (e.g. 8000,
 11025, 16000, 22050, 32000, 44100, 48000 Hz) and reject anything else, so
 real-world SF2s (which often mix sample rates) may need resampling before
 encoding. If your encoder has to resample, return `{ data, sampleRate }` instead
-of a plain `Uint8Array` - `write()` rescales the sample's stored rate and loop
+of a plain `Uint8Array` -- `write()` rescales the sample's stored rate and loop
 points to match automatically, so pitch and looping stay correct.
 
 A full, ready-to-use implementation including this resampling fallback, an
