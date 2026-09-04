@@ -4,7 +4,7 @@ import { timecentToSecond } from "./Voice.ts";
 import { createInstrumentGeneratorStore } from "./Generator.ts";
 
 const tolerance = 5e-3;
-const input = Deno.readFileSync("./fixture/TestSoundFont.sf2");
+const input = Deno.readFileSync("./fixtures/TestSoundFont.sf2");
 const soundFont = parse(input);
 
 Deno.test("should create Preset Zone", () => {

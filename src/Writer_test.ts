@@ -3,7 +3,7 @@ import { parse } from "./Parser.ts";
 import { SF3Encoder, write } from "./Writer.ts";
 import type { SoundFont } from "./SoundFont.ts";
 
-const input = Deno.readFileSync("./fixture/TestSoundFont.sf2");
+const input = Deno.readFileSync("./fixtures/TestSoundFont.sf2");
 const original = parse(input);
 const rewrittenPromise = write(original);
 
@@ -288,7 +288,7 @@ Deno.test("SF3 write: terminal shdr is a zeroed record (not named EOS)", async (
 Deno.test("parse normalizes missing 0x10 flag on legacy SF3", () => {
   // The bundled GeneralUser fixture is a known legacy SF3 with size=2 ifil
   // and sampleType without the compressed bit.
-  const input = Deno.readFileSync("./fixture/GeneralUser_GS_v1.472.sf3");
+  const input = Deno.readFileSync("./fixtures/GeneralUser_GS_v1.472.sf3");
   const sf = parse(input);
   assertEquals(sf.info.version.major, 3);
   // After normalization every non-terminal sample must have the flag.
@@ -304,7 +304,7 @@ Deno.test("parse normalizes missing 0x10 flag on legacy SF3", () => {
 });
 
 Deno.test("re-write of legacy SF3 produces correct ifil and flags", async () => {
-  const input = Deno.readFileSync("./fixture/GeneralUser_GS_v1.472.sf3");
+  const input = Deno.readFileSync("./fixtures/GeneralUser_GS_v1.472.sf3");
   const sf = parse(input);
   // Pass-through write (no encode) must still emit a clean SF3.
   const bytes = await write(sf);
@@ -324,7 +324,7 @@ Deno.test("re-write of legacy SF3 produces correct ifil and flags", async () => 
 
 Deno.test("parse accepts both EOS and empty-name terminal shdr", () => {
   // Polyphone-style empty terminal
-  const poly = Deno.readFileSync("./fixture/GeneralUser_GS_v1.472.sf3");
+  const poly = Deno.readFileSync("./fixtures/GeneralUser_GS_v1.472.sf3");
   const sfPoly = parse(poly);
   // Should not include the terminal as a real sample
   for (const h of sfPoly.sampleHeaders) {
@@ -334,7 +334,7 @@ Deno.test("parse accepts both EOS and empty-name terminal shdr", () => {
   assertEquals(sfPoly.sampleHeaders.length > 0, true);
 
   // EOS-style terminal (the other attached file)
-  const g = Deno.readFileSync("./fixture/TestSoundFont.sf3");
+  const g = Deno.readFileSync("./fixtures/TestSoundFont.sf3");
   const sfG = parse(g);
   for (const h of sfG.sampleHeaders) {
     assertEquals(h.isEnd, false);

@@ -1,7 +1,7 @@
 import { parseData } from "./Parser.ts";
 import { assertEquals } from "@std/assert";
 
-const input = Deno.readFileSync("./fixture/TestSoundFont.sf2");
+const input = Deno.readFileSync("./fixtures/TestSoundFont.sf2");
 const parser = parseData(input);
 
 Deno.test("should parse INFO", () => {

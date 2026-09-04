@@ -8,7 +8,7 @@ import {
 import { parse } from "../src/mod.ts";
 
 const file = Deno.readFileSync(
-  new URL("../fixture/GeneralUser_GS_v1.472.sf3", import.meta.url),
+  new URL("../fixtures/GeneralUser_GS_v1.472.sf3", import.meta.url),
 );
 
 // Silence expected getVoice() warnings (missing preset / out-of-range key).
