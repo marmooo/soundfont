@@ -12,14 +12,14 @@ export class VersionTag {
   ) {}
 
   static parse(stream: Stream) {
-    const major = stream.readInt8();
-    const minor = stream.readInt8();
+    const major = stream.readWORD();
+    const minor = stream.readWORD();
     return new VersionTag(major, minor);
   }
 
   write(stream: WriteStream) {
-    stream.writeInt8(this.major);
-    stream.writeInt8(this.minor);
+    stream.writeWORD(this.major);
+    stream.writeWORD(this.minor);
   }
 }
 
@@ -99,7 +99,7 @@ export class Info {
 
     function versionChunk(type: string, value: VersionTag | null) {
       if (value === null) return null;
-      const stream = new WriteStream(2);
+      const stream = new WriteStream(4);
       value.write(stream);
       return writeChunk(type, stream.toUint8Array());
     }
