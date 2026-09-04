@@ -16,9 +16,9 @@ Deno.test("should parse INFO", () => {
   assertEquals(parser.info.version.major, 2);
   assertEquals(parser.info.version.minor, 1);
 
-  // FIXME: I don't know how to set these values to the soundfont
-  // assertEquals(parser.info.romName, "");
-  // assertEquals(parser.info.romVersion, "0.00");
+  // Optional ROM chunks (irom / iver) are absent in this fixture
+  assertEquals(parser.info.romName, null);
+  assertEquals(parser.info.romVersion, null);
 });
 
 Deno.test("should parse instruments", () => {
