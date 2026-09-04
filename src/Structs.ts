@@ -374,7 +374,15 @@ export class SampleHeader {
   ) {}
 
   get isEnd() {
-    return this.sampleName === "EOS";
+    // Accept both the common "EOS" sentinel and a fully zeroed record
+    // (what Polyphone and some other writers emit).
+    if (this.sampleName === "EOS") return true;
+    return this.sampleName === "" &&
+      this.start === 0 && this.end === 0 &&
+      this.loopStart === 0 && this.loopEnd === 0 &&
+      this.sampleRate === 0 && this.originalPitch === 0 &&
+      this.pitchCorrection === 0 && this.sampleLink === 0 &&
+      this.sampleType === 0;
   }
 
   static parse(stream: Stream, isSF3?: boolean) {
@@ -408,9 +416,11 @@ export class SampleHeader {
     );
   }
 
-  // terminal "EOS" record, marks the end of the shdr sub-chunk
+  // terminal record for the shdr sub-chunk.
+  // Empty name matches Polyphone / SF2 terminal convention used by several
+  // tools; "EOS" is still accepted by isEnd when reading older files.
   static end() {
-    return new SampleHeader("EOS", 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    return new SampleHeader("", 0, 0, 0, 0, 0, 0, 0, 0, 0);
   }
 
   write(stream: WriteStream, isSF3?: boolean) {

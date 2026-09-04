@@ -92,6 +92,20 @@ export function parseData(
       throw new Error("invalid pdta chunk");
     }
 
+    const sampleHeaders = parseShdr(chunkList[8], data, isSF3);
+
+    // Legacy SF3 files (older MuseScore / sf3convert) often omit the 0x10
+    // compressed flag in sfSampleType even though the data is Ogg Vorbis.
+    // Normalize so re-writes and consumers see a consistent header.
+    if (isSF3) {
+      for (let i = 0; i < sampleHeaders.length; i++) {
+        const h = sampleHeaders[i];
+        if (!h.isEnd && (h.sampleType & 0x10) === 0) {
+          h.sampleType = h.sampleType | 0x10;
+        }
+      }
+    }
+
     return {
       presetHeaders: parsePhdr(chunkList[0], data),
       presetZone: parsePbag(chunkList[1], data),
@@ -101,7 +115,7 @@ export function parseData(
       instrumentZone: parseIbag(chunkList[5], data),
       instrumentModulators: parseImod(chunkList[6], data),
       instrumentGenerators: parseIgen(chunkList[7], data),
-      sampleHeaders: parseShdr(chunkList[8], data, isSF3),
+      sampleHeaders,
     };
   }
 

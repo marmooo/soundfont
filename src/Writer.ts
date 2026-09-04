@@ -113,7 +113,9 @@ export function write(
 
 function writeSF2(soundFont: SoundFont, options: WriteOptions): Uint8Array {
   const isSF3 = soundFont.info.version.major === 3;
-  const silentFrames = options.silentFrames ?? 46;
+  // Compressed samples must not have the SF2-mandated 46-frame silence
+  // padding; only PCM needs it.
+  const silentFrames = options.silentFrames ?? (isSF3 ? 0 : 46);
 
   const { data: sampleData, sampleHeaders } = repackSamples(
     soundFont.samples,
@@ -122,10 +124,14 @@ function writeSF2(soundFont: SoundFont, options: WriteOptions): Uint8Array {
     silentFrames,
   );
 
+  // Always emit a clean 3.0 version tag for SF3. Legacy files sometimes
+  // carry a garbage minor (from an incorrect ifil chunk size of 2).
+  const version = isSF3 ? new VersionTag(3, 0) : soundFont.info.version;
+
   return buildContainer(
     soundFont,
     isSF3,
-    soundFont.info.version,
+    version,
     sampleData,
     sampleHeaders,
   );
@@ -291,9 +297,7 @@ function repackSamples(
     const header = headers[i];
     const sample = samples[i];
     const frameCount = sample.data.byteLength / bytesPerFrame;
-    const sampleType = isSF3
-      ? (header.sampleType | 0x10)
-      : header.sampleType;
+    const sampleType = isSF3 ? (header.sampleType | 0x10) : header.sampleType;
     newHeaders[i] = new SampleHeader(
       header.sampleName,
       frameOffset,

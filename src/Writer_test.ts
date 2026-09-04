@@ -209,3 +209,134 @@ Deno.test("should run encodes concurrently up to `concurrency`", async () => {
   await write(soundFont, { encode: delayEncode, concurrency: 3 });
   assertEquals(maxActive, 3);
 });
+
+// ---------------------------------------------------------------------------
+// SF3 / Polyphone compatibility tests
+// ---------------------------------------------------------------------------
+
+function findChunk(data: Uint8Array, id: string): number {
+  const a = id.charCodeAt(0),
+    b = id.charCodeAt(1),
+    c = id.charCodeAt(2),
+    d = id.charCodeAt(3);
+  for (let i = 0; i < data.length - 4; i++) {
+    if (
+      data[i] === a && data[i + 1] === b && data[i + 2] === c &&
+      data[i + 3] === d
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function readU32(data: Uint8Array, offset: number): number {
+  return data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) |
+    (data[offset + 3] << 24);
+}
+
+function readU16(data: Uint8Array, offset: number): number {
+  return data[offset] | (data[offset + 1] << 8);
+}
+
+Deno.test("SF3 write: ifil chunk size is 4 and version is 3.0", async () => {
+  const fakeEncode: SF3Encoder = () =>
+    new Uint8Array([0x4f, 0x67, 0x67, 0x53, 0, 0, 0, 0]);
+  const bytes = await write(original, { encode: fakeEncode });
+
+  const ifil = findChunk(bytes, "ifil");
+  assertEquals(ifil >= 0, true);
+  assertEquals(readU32(bytes, ifil + 4), 4, "ifil size must be 4");
+  assertEquals(readU16(bytes, ifil + 8), 3, "major version");
+  assertEquals(readU16(bytes, ifil + 10), 0, "minor version must be 0");
+});
+
+Deno.test("SF3 write: every sample has the 0x10 compressed flag", async () => {
+  const fakeEncode: SF3Encoder = () =>
+    new Uint8Array([0x4f, 0x67, 0x67, 0x53, 0, 0, 0, 0]);
+  const bytes = await write(original, { encode: fakeEncode });
+  const sf3 = parse(bytes);
+
+  for (let i = 0; i < sf3.sampleHeaders.length; i++) {
+    const h = sf3.sampleHeaders[i];
+    if (h.isEnd) continue;
+    assertEquals(
+      (h.sampleType & 0x10) !== 0,
+      true,
+      `sample ${i} (${h.sampleName}) missing 0x10 flag`,
+    );
+  }
+});
+
+Deno.test("SF3 write: terminal shdr is a zeroed record (not named EOS)", async () => {
+  const fakeEncode: SF3Encoder = () => new Uint8Array([0x4f, 0x67, 0x67, 0x53]);
+  const bytes = await write(original, { encode: fakeEncode });
+
+  const shdr = findChunk(bytes, "shdr");
+  const size = readU32(bytes, shdr + 4);
+  const n = size / 46;
+  const lastName = bytes.subarray(
+    shdr + 8 + (n - 1) * 46,
+    shdr + 8 + (n - 1) * 46 + 20,
+  );
+  // all zeros
+  for (let i = 0; i < 20; i++) {
+    assertEquals(lastName[i], 0, `terminal name byte ${i} should be 0`);
+  }
+});
+
+Deno.test("parse normalizes missing 0x10 flag on legacy SF3", () => {
+  // The bundled GeneralUser fixture is a known legacy SF3 with size=2 ifil
+  // and sampleType without the compressed bit.
+  const input = Deno.readFileSync("./fixture/GeneralUser_GS_v1.472.sf3");
+  const sf = parse(input);
+  assertEquals(sf.info.version.major, 3);
+  // After normalization every non-terminal sample must have the flag.
+  for (let i = 0; i < sf.sampleHeaders.length; i++) {
+    const h = sf.sampleHeaders[i];
+    if (h.isEnd) continue;
+    assertEquals(
+      (h.sampleType & 0x10) !== 0,
+      true,
+      `fixture sample ${i} should have been normalized to include 0x10`,
+    );
+  }
+});
+
+Deno.test("re-write of legacy SF3 produces correct ifil and flags", async () => {
+  const input = Deno.readFileSync("./fixture/GeneralUser_GS_v1.472.sf3");
+  const sf = parse(input);
+  // Pass-through write (no encode) must still emit a clean SF3.
+  const bytes = await write(sf);
+
+  const ifil = findChunk(bytes, "ifil");
+  assertEquals(readU32(bytes, ifil + 4), 4);
+  assertEquals(readU16(bytes, ifil + 8), 3);
+  assertEquals(readU16(bytes, ifil + 10), 0);
+
+  const reparsed = parse(bytes);
+  for (let i = 0; i < reparsed.sampleHeaders.length; i++) {
+    const h = reparsed.sampleHeaders[i];
+    if (h.isEnd) continue;
+    assertEquals((h.sampleType & 0x10) !== 0, true);
+  }
+});
+
+Deno.test("parse accepts both EOS and empty-name terminal shdr", () => {
+  // Polyphone-style empty terminal
+  const poly = Deno.readFileSync("./fixture/GeneralUser_GS_v1.472.sf3");
+  const sfPoly = parse(poly);
+  // Should not include the terminal as a real sample
+  for (const h of sfPoly.sampleHeaders) {
+    assertEquals(h.isEnd, false);
+    assertEquals(h.sampleName !== "", true);
+  }
+  assertEquals(sfPoly.sampleHeaders.length > 0, true);
+
+  // EOS-style terminal (the other attached file)
+  const g = Deno.readFileSync("./fixture/TestSoundFont.sf3");
+  const sfG = parse(g);
+  for (const h of sfG.sampleHeaders) {
+    assertEquals(h.isEnd, false);
+  }
+});
