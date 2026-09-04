@@ -14,7 +14,7 @@ Deno.test("should parse INFO", () => {
   assertEquals(parser.info.software, "Polyphone");
   assertEquals(parser.info.soundEngine, "EMU8000");
   assertEquals(parser.info.version.major, 2);
-  assertEquals(parser.info.version.minor, 0);
+  assertEquals(parser.info.version.minor, 1);
 
   // FIXME: I don't know how to set these values to the soundfont
   // assertEquals(parser.info.romName, "");
