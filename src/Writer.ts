@@ -291,6 +291,9 @@ function repackSamples(
     const header = headers[i];
     const sample = samples[i];
     const frameCount = sample.data.byteLength / bytesPerFrame;
+    const sampleType = isSF3
+      ? (header.sampleType | 0x10)
+      : header.sampleType;
     newHeaders[i] = new SampleHeader(
       header.sampleName,
       frameOffset,
@@ -301,7 +304,7 @@ function repackSamples(
       header.originalPitch,
       header.pitchCorrection,
       header.sampleLink,
-      header.sampleType,
+      sampleType,
     );
     chunks.push(sample.data);
     chunks.push(silence);
