@@ -28,7 +28,7 @@ await build({
   postBuild() {
     Deno.copyFileSync("LICENSE", "npm/LICENSE");
     Deno.copyFileSync("README.md", "npm/README.md");
-    copySync("fixture", "npm/esm/fixture");
-    copySync("fixture", "npm/script/fixture");
+    copySync("fixtures", "npm/esm/fixtures");
+    copySync("fixtures", "npm/script/fixtures");
   },
 });
