@@ -340,3 +340,30 @@ Deno.test("parse accepts both EOS and empty-name terminal shdr", () => {
     assertEquals(h.isEnd, false);
   }
 });
+
+Deno.test("INFO string chunks have even size (Polyphone compatibility)", async () => {
+  // Polyphone's INFO parser does pos += 8 + size and never skips a RIFF pad
+  // byte. Odd-sized INFO strings therefore break parsing ("invalid header").
+  // Our writer must emit even-sized string payloads.
+  const bytes = await write(original);
+  const listPos = findChunk(bytes, "LIST");
+  // First LIST is INFO
+  const listSize = readU32(bytes, listPos + 4);
+  let pos = listPos + 12; // after LIST + size + "INFO"
+  const end = listPos + 8 + listSize;
+  while (pos + 8 <= end) {
+    const id = String.fromCharCode(
+      bytes[pos],
+      bytes[pos + 1],
+      bytes[pos + 2],
+      bytes[pos + 3],
+    );
+    const size = readU32(bytes, pos + 4);
+    assertEquals(
+      size % 2,
+      0,
+      `INFO chunk ${id} size ${size} must be even for Polyphone`,
+    );
+    pos += 8 + size;
+  }
+});

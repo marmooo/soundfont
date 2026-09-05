@@ -94,7 +94,17 @@ export class Info {
       if (value === null) return null;
       const stream = new WriteStream();
       stream.writeZString(value);
-      return writeChunk(type, stream.toUint8Array());
+      // Polyphone's INFO reader advances by `8 + size` and does NOT skip the
+      // RIFF pad byte for odd-sized chunks. Pad the payload itself to an even
+      // length (extra NUL) so size is even and no external pad is inserted.
+      // This matches Polyphone's own writer output.
+      const bytes = stream.toUint8Array();
+      if ((bytes.length & 1) === 1) {
+        const even = new Uint8Array(bytes.length + 1);
+        even.set(bytes);
+        return writeChunk(type, even);
+      }
+      return writeChunk(type, bytes);
     }
 
     function versionChunk(type: string, value: VersionTag | null) {
