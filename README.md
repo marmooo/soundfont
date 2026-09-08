@@ -98,5 +98,6 @@ This library is based on
 The SoundFont 3 format (SF3) is an unofficial extension of the SoundFont 2
 format (SF2). This library is based on following articles.
 
-- [SoundFont® Technical Specification](https://www.synthfont.com/sfspec24.pdf)
+- [SoundFont® Technical Specification Version 2.04](https://www.synthfont.com/sfspec24.pdf)
+- [SoundFont® Technical Specification Version 2.01](https://www.synthfont.com/SFSPEC21.PDF)
 - [SoundFont3Format](https://www.fluidsynth.org/wiki/SoundFont3Format)
