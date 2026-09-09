@@ -16,8 +16,8 @@ export function timecentToSecond(value: number) {
 }
 
 // The spec-defined generator values for a voice (a specific note on a
-// specific preset/instrument), after zone merging and — if controller
-// values are supplied — modulator application. Units are exactly as
+// specific preset/instrument), after zone merging and -- if controller
+// values are supplied -- modulator application. Units are exactly as
 // defined by the SF2 spec (timecents, centibels, tenths of a percent,
 // ...); convert them yourself (e.g. with timecentToSecond) as your
 // synthesis engine needs. This is deliberately a thin, generic view of the
@@ -138,7 +138,7 @@ export class Voice {
 
   // applies every modulator whose source controller is present in
   // `controllerState` on top of this voice's static (zone-merged)
-  // generators, and clamps the result to each generator's legal range —
+  // generators, and clamps the result to each generator's legal range --
   // both are spec-mandated (SF2 §8, §9.5), not implementation choices.
   //
   // Fast path: when no controller is active, returns the voice's already
@@ -222,8 +222,8 @@ export class Voice {
     return params;
   }
 
-  // the full set of spec-defined generator values for this voice — see
-  // transformAllParams() — plus the resolved absolute sample playback
+  // the full set of spec-defined generator values for this voice -- see
+  // transformAllParams() -- plus the resolved absolute sample playback
   // range (SF2 §7.9).
   getAllParams(controllerValues: Float32Array): VoiceParams {
     const generators = this.transformAllParams(controllerValues);
@@ -250,7 +250,7 @@ export class Voice {
   }
 
   // just the generators affected by a single controller change (e.g. mod
-  // wheel) — see transformParams(). Same raw spec units as
+  // wheel) -- see transformParams(). Same raw spec units as
   // getAllParams().generators.
   getParams(
     controllerType: number,

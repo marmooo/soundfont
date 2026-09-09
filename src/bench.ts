@@ -31,11 +31,11 @@ const soundFontOld = new SoundFontOld(parsedOld);
 const soundFont = parse(file);
 const controllerState = new Float32Array(256);
 
-// First preset (findIndex is nearly free on the old path — index 0).
+// First preset (findIndex is nearly free on the old path -- index 0).
 const bank0 = soundFont.presetHeaders[0].bank;
 const preset0 = soundFont.presetHeaders[0].preset;
 
-// Last non-terminal preset that yields a voice at middle C — forces the old
+// Last non-terminal preset that yields a voice at middle C -- forces the old
 // path to scan nearly the whole presetHeaders list on every call.
 let lastWorking = 0;
 for (let i = soundFont.presetHeaders.length - 1; i >= 0; i--) {
@@ -55,7 +55,7 @@ for (let key = 0; key < 128; key++) {
   if (soundFont.getVoice(bankLast, presetLast, key, 100)) lastKeys.push(key);
 }
 
-// Every non-terminal preset, for a single key — stresses lookup volume.
+// Every non-terminal preset, for a single key -- stresses lookup volume.
 const allPresets: { bank: number; preset: number }[] = [];
 for (let i = 0; i < soundFont.presetHeaders.length; i++) {
   const p = soundFont.presetHeaders[i];
@@ -133,7 +133,7 @@ Deno.bench("getVoice only (all presets, 1 key) (new)", {
   }
 });
 
-// getAllParams only — isolates the zero-controller fast path from getVoice.
+// getAllParams only -- isolates the zero-controller fast path from getVoice.
 const voices: ReturnType<typeof soundFont.getVoice>[] = [];
 for (let key = 0; key < 128; key++) {
   const v = soundFont.getVoice(bank0, preset0, key, 100);
