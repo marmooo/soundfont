@@ -44,25 +44,24 @@ export class ModulatorSource {
         break;
       case 1: { // concave
         const absV = Math.abs(v);
-        // Clamp out-of-range values to 0 (as required by the spec)
-        if (absV <= 0 || absV >= 1) {
+        if (absV <= 0) {
           v = 0;
+        } else if (absV >= 1) {
+          v = Math.sign(v) * 1;
         } else {
-          // Normalized concave curve.
-          // The factor -40/96 (= 2 * -20/96) comes from the conventional
-          // 96 dB full-scale attenuation used by SoundFont.
-          // SF 2.01 page 73.
-          const concave = -(40 / 96) * Math.log10(1 - absV);
+          const concave = -(20 / 96) * Math.log10(1 - absV);
           v = Math.sign(v) * concave;
         }
         break;
       }
       case 2: { // convex
         const absV = Math.abs(v);
-        if (absV <= 0 || absV >= 1) {
+        if (absV <= 0) {
           v = 0;
+        } else if (absV >= 1) {
+          v = Math.sign(v) * 1;
         } else {
-          v = Math.sign(v) * (1.0 + (40 / 96) * Math.log10(absV));
+          v = Math.sign(v) * (1.0 + (20 / 96) * Math.log10(absV));
         }
         break;
       }
