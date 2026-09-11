@@ -359,6 +359,23 @@ export class SoundFont implements ParseResult {
     return;
   }
 
+  findInstrumentZones(
+    instrumentID: number,
+    key: number,
+    velocity: number,
+  ): CachedInstrumentZone[] {
+    const zones = this.cachedInstrumentZones[instrumentID];
+    if (!zones) return [];
+    const out: CachedInstrumentZone[] = [];
+    for (let i = 0; i < zones.length; i++) {
+      const zone = zones[i];
+      if (zone.keyRange && !zone.keyRange.in(key)) continue;
+      if (zone.velRange && !zone.velRange.in(velocity)) continue;
+      out.push(zone);
+    }
+    return out;
+  }
+
   findInstrument(presetHeaderIndex: number, key: number, velocity: number) {
     const zones = this.cachedPresetZones[presetHeaderIndex];
     if (!zones) return null;
@@ -376,6 +393,30 @@ export class SoundFont implements ParseResult {
       }
     }
     return null;
+  }
+
+  findInstruments(
+    presetHeaderIndex: number,
+    key: number,
+    velocity: number,
+  ): Voice[] {
+    const zones = this.cachedPresetZones[presetHeaderIndex];
+    if (!zones) return [];
+    const voices: Voice[] = [];
+    for (let i = 0; i < zones.length; i++) {
+      const zone = zones[i];
+      if (zone.keyRange && !zone.keyRange.in(key)) continue;
+      if (zone.velRange && !zone.velRange.in(velocity)) continue;
+      const instrumentZones = this.findInstrumentZones(
+        zone.instrumentID,
+        key,
+        velocity,
+      );
+      for (let j = 0; j < instrumentZones.length; j++) {
+        voices.push(this.createVoice(key, zone, instrumentZones[j]));
+      }
+    }
+    return voices;
   }
 
   createVoice(
@@ -425,6 +466,26 @@ export class SoundFont implements ParseResult {
       return null;
     }
     return instrument;
+  }
+
+  getVoices(
+    bankNumber: number,
+    instrumentNumber: number,
+    key: number,
+    velocity: number,
+  ): Voice[] {
+    const presetHeaderIndex = this.presetIndex.get(
+      SoundFont.presetKey(bankNumber, instrumentNumber),
+    );
+    if (presetHeaderIndex === undefined) {
+      console.warn(
+        "preset not found: bank=%s instrument=%s",
+        bankNumber,
+        instrumentNumber,
+      );
+      return [];
+    }
+    return this.findInstruments(presetHeaderIndex, key, velocity);
   }
 
   // presetNames[bankNumber][presetNumber] = presetName
